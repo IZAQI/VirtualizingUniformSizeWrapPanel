@@ -232,6 +232,7 @@ namespace CodePlex.VirtualizingWrapPanel
 
                 var childSize = prevSize;
 
+#if false
                 for (int i = firstIndex; i < endIndex; i++)
                 {
                     // オフセット
@@ -256,13 +257,90 @@ namespace CodePlex.VirtualizingWrapPanel
 
                     if (continium) break;
                 }
+
+#else
+                            // measure phase
+                for (int i = firstIndex; i < endIndex; i++)
+                {
+                    // オフセット
+                    var x = (int)((i % columCount) * childSize.Width);
+                    var y = (int)((i / columCount) * childSize.Height);
+
+                    // 子要素がビューポート内であれば子要素を生成しサイズを再計測
+                    var itemRect = new Rect(x, y, childSize.Width, childSize.Height);
+                    var viewportRect = new Rect(adjustViewPortOffset, availableSize);
+                    if (itemRect.IntersectsWith(viewportRect))
+                    {
+                        //var child = generator.GetOrCreateChild(i);
+                        //child.Measure(childSize);
+                        //childSize = this.ContainerSizeForIndex(i);
+
+                        // 確定したサイズを記憶
+                        this.containerLayouts[i]=  new Rect(x, y, childSize.Width, childSize.Height);
+
+                        continium = true;
+                        continue;
+                    }
+
+                    if (continium) break;
+                }
+
+                continium = false;
+
+                var limitTime = 10;
+                
+                var stopWatch = new Stopwatch();
+                stopWatch.Start();
+
+                // create phase
+                for (int i = firstIndex; i < endIndex; i++)
+                {
+                    // オフセット
+                    var x = (int)((i % columCount) * childSize.Width);
+                    var y = (int)((i / columCount) * childSize.Height);
+
+                    // 子要素がビューポート内であれば子要素を生成しサイズを再計測
+                    var itemRect = new Rect(x, y, childSize.Width, childSize.Height);
+                    var viewportRect = new Rect(adjustViewPortOffset, availableSize);
+                    if (itemRect.IntersectsWith(viewportRect))
+                    {
+                        var child = generator.GetOrCreateChild(i);
+                        child.Measure(childSize);
+                        childSize = this.ContainerSizeForIndex(i);
+
+                        // 確定したサイズを記憶
+                        //this.containerLayouts[i] = new Rect(x, y, childSize.Width, childSize.Height);
+
+                        continium = true;
+                        continue;
+                    }
+
+                    // timelimit
+                    stopWatch.Stop();
+                    if (stopWatch.ElapsedMilliseconds > limitTime)
+                    {
+                        System.Console.WriteLine("request Measure");
+                       // Dispatcher.BeginInvoke((Action)(() => {
+                            System.Console.WriteLine("Measure");
+                            InvalidateMeasure();
+                        //}));
+
+                        break;
+                    }
+                    stopWatch.Start();
+
+                    if (continium) break;
+
+
+                }
+
+#endif
                 generator.CleanupChildren();
 
                 var row = childrenCount / columCount + ((childrenCount % columCount == 0) ? 0 : 1);
 
                 maxSize = new Size(availableSize.Width, Math.Max(row * childSize.Height, availableSize.Height));
             }
-
 
             prevViewPortSize = availableSize;
 
