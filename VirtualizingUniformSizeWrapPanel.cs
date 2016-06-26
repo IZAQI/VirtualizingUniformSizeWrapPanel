@@ -146,6 +146,30 @@ namespace CodePlex.VirtualizingWrapPanel
         /// </summary>
         private ConcurrentDictionary<int, Rect> containerLayouts = new ConcurrentDictionary<int, Rect>();
 
+        private double GetLogicalWidth(Size size)
+        {
+            var isHorizontal = this.Orientation == Orientation.Horizontal;
+            return isHorizontal ? size.Width : size.Height;
+        }
+
+        private double GetLogicalHeight(Size size)
+        {
+            var isHorizontal = this.Orientation == Orientation.Horizontal;
+            return isHorizontal ? size.Height : size.Width;
+        }
+
+        private double GetLogicalX(Point point)
+        {
+            var isHorizontal = this.Orientation == Orientation.Horizontal;
+            return isHorizontal ? point.X : point.Y;
+        }
+
+        private double GetLogicalY(Point point)
+        {
+            var isHorizontal = this.Orientation == Orientation.Horizontal;
+            return isHorizontal ? point.Y : point.X;
+        }
+
         /// <summary>
         /// 子要素に必要なレイアウトのサイズを測定し、パネルのサイズを決定する。
         /// </summary>
@@ -154,10 +178,12 @@ namespace CodePlex.VirtualizingWrapPanel
         protected override Size MeasureOverride(Size availableSize)
         {
 #if true
-            Debug.Assert(this.Orientation == Orientation.Horizontal);
+            //Debug.Assert(this.Orientation == Orientation.Horizontal);
+
+            var isHorizontal = this.Orientation == Orientation.Horizontal;
 
             var maxSize = default(Size);
-            if (availableSize.Width < 1) return maxSize;
+            if (GetLogicalWidth(availableSize) < 1) return maxSize;
 
             // ビューポートのサイズが変更された初期化
             var isChaigeViewPortSize = prevViewPortSize != availableSize;
@@ -168,16 +194,16 @@ namespace CodePlex.VirtualizingWrapPanel
             }
 
             // 変更前の1行の要素数
-            var prevColumCount = Math.Max(1,Convert.ToInt32(prevViewPortSize.Width) / Convert.ToInt32(prevSize.Width));
+            var prevColumCount = Math.Max(1,Convert.ToInt32(GetLogicalWidth(prevViewPortSize)) / Convert.ToInt32(GetLogicalWidth(prevSize)));
 
             // 最初の操作インデックス取得
             var vy = Convert.ToInt32(this.offset.Y) / Convert.ToInt32(prevSize.Height);
-            var vx = Convert.ToInt32(this.offset.X) / Convert.ToInt32(prevSize.Width);
+            var vx = Convert.ToInt32(GetLogicalX(this.offset)) / Convert.ToInt32(prevSize.Width);
             var first = vx + vy * prevColumCount;
 
             // 最後のインデックス取得
-            var vey = (Convert.ToInt32(this.offset.Y) + prevViewPortSize.Height) / Convert.ToInt32(prevSize.Height) + 2;
-            var vex = (Convert.ToInt32(this.offset.X) + prevViewPortSize.Width) / Convert.ToInt32(prevSize.Width) + 1;
+            var vey = (Convert.ToInt32(GetLogicalY(this.offset)) + GetLogicalHeight(prevViewPortSize)) / Convert.ToInt32(GetLogicalHeight(prevSize)) + 2;
+            var vex = (Convert.ToInt32(GetLogicalX(this.offset)) + GetLogicalWidth(prevViewPortSize)) / Convert.ToInt32(GetLogicalWidth(prevSize)) + 1;
             var end = Convert.ToInt32(vex + vey * prevColumCount) + 1;
 
             int childrenCount = 0;
@@ -211,16 +237,22 @@ namespace CodePlex.VirtualizingWrapPanel
             System.Console.WriteLine("Index:{0},{1}",first, end);
 
             // 変更あとの1行の要素数
-            var columCount = Math.Max(1, Convert.ToInt32(availableSize.Width) / Convert.ToInt32(prevSize.Width));
+            var columCount = Math.Max(1, Convert.ToInt32(GetLogicalWidth(availableSize)) / Convert.ToInt32(GetLogicalWidth(prevSize)));
 
             var adjustViewPortOffset = this.offset;
             if (isChaigeViewPortSize)
             {
-                var pvx = adjustViewPortOffset.X;
-                var pvy = adjustViewPortOffset.Y;
+                var pvy = GetLogicalY(adjustViewPortOffset);
 
                 pvy = pvy * prevColumCount / columCount;
-                adjustViewPortOffset.Y = pvy;
+                if (isHorizontal)
+                {
+                    adjustViewPortOffset.Y = pvy;
+                }
+                else
+                {
+                    adjustViewPortOffset.X = pvy;
+                }
             }
 
             //var container = this.InternalChildren;
@@ -232,7 +264,7 @@ namespace CodePlex.VirtualizingWrapPanel
 
                 var childSize = prevSize;
 
-#if false
+#if false // normal calc
                 for (int i = firstIndex; i < endIndex; i++)
                 {
                     // オフセット
@@ -258,16 +290,16 @@ namespace CodePlex.VirtualizingWrapPanel
                     if (continium) break;
                 }
 
-#else
-                            // measure phase
+#else   // timelimit version.
+                // measure phase
                 for (int i = firstIndex; i < endIndex; i++)
                 {
                     // オフセット
-                    var x = (int)((i % columCount) * childSize.Width);
-                    var y = (int)((i / columCount) * childSize.Height);
+                    var x = (int)((i % columCount) * GetLogicalWidth(childSize));
+                    var y = (int)((i / columCount) * GetLogicalHeight(childSize));
 
                     // 子要素がビューポート内であれば子要素を生成しサイズを再計測
-                    var itemRect = new Rect(x, y, childSize.Width, childSize.Height);
+                    var itemRect = new Rect(isHorizontal?x:y, isHorizontal ? y : x, childSize.Width, childSize.Height);
                     var viewportRect = new Rect(adjustViewPortOffset, availableSize);
                     if (itemRect.IntersectsWith(viewportRect))
                     {
@@ -276,7 +308,7 @@ namespace CodePlex.VirtualizingWrapPanel
                         //childSize = this.ContainerSizeForIndex(i);
 
                         // 確定したサイズを記憶
-                        this.containerLayouts[i]=  new Rect(x, y, childSize.Width, childSize.Height);
+                        this.containerLayouts[i]=  new Rect(isHorizontal ? x : y, isHorizontal ? y : x, childSize.Width, childSize.Height);
 
                         continium = true;
                         continue;
@@ -296,11 +328,11 @@ namespace CodePlex.VirtualizingWrapPanel
                 for (int i = firstIndex; i < endIndex; i++)
                 {
                     // オフセット
-                    var x = (int)((i % columCount) * childSize.Width);
-                    var y = (int)((i / columCount) * childSize.Height);
+                    var x = (int)((i % columCount) * GetLogicalWidth(childSize));
+                    var y = (int)((i / columCount) * GetLogicalHeight(childSize));
 
                     // 子要素がビューポート内であれば子要素を生成しサイズを再計測
-                    var itemRect = new Rect(x, y, childSize.Width, childSize.Height);
+                    var itemRect = new Rect(isHorizontal ? x : y, isHorizontal ? y : x, childSize.Width, childSize.Height);
                     var viewportRect = new Rect(adjustViewPortOffset, availableSize);
                     if (itemRect.IntersectsWith(viewportRect))
                     {
@@ -309,7 +341,7 @@ namespace CodePlex.VirtualizingWrapPanel
                         childSize = this.ContainerSizeForIndex(i);
 
                         // 確定したサイズを記憶
-                        //this.containerLayouts[i] = new Rect(x, y, childSize.Width, childSize.Height);
+                        //this.containerLayouts[i] = new Rect(isHorizontal ? x : y, isHorizontal ? y : x, childSize.Width, childSize.Height);
 
                         continium = true;
                         continue;
@@ -339,7 +371,13 @@ namespace CodePlex.VirtualizingWrapPanel
 
                 var row = childrenCount / columCount + ((childrenCount % columCount == 0) ? 0 : 1);
 
-                maxSize = new Size(availableSize.Width, Math.Max(row * childSize.Height, availableSize.Height));
+                if (isHorizontal)
+                {
+                    maxSize = new Size(availableSize.Width, Math.Max(row * childSize.Height, availableSize.Height));
+                } else
+                {
+                    maxSize = new Size(Math.Max(row * childSize.Width, availableSize.Width), availableSize.Height );
+                }
             }
 
             prevViewPortSize = availableSize;
