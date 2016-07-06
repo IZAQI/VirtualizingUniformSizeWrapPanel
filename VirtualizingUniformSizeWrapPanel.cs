@@ -319,7 +319,7 @@ namespace CodePlex.VirtualizingWrapPanel
 
                 continium = false;
 
-                var limitTime = 10;
+                var limitTime = 10000;
                 
                 var stopWatch = new Stopwatch();
 
@@ -346,8 +346,8 @@ namespace CodePlex.VirtualizingWrapPanel
 
                         // timelimit
                         stopWatch.Stop();
-                        if (stopWatch.ElapsedMilliseconds > limitTime)
-                        //if (stopWatch.ElapsedTicks > limitTime)
+                        //if (stopWatch.ElapsedMilliseconds > limitTime)
+                        if (stopWatch.ElapsedTicks > limitTime)
                         {
                             System.Console.WriteLine("request Measure");
                             // Dispatcher.BeginInvoke((Action)(() => {
