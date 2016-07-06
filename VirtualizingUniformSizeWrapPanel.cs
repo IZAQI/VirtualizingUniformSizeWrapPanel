@@ -322,7 +322,6 @@ namespace CodePlex.VirtualizingWrapPanel
                 var limitTime = 10;
                 
                 var stopWatch = new Stopwatch();
-                stopWatch.Start();
 
                 // create phase
                 for (int i = firstIndex; i < endIndex; i++)
@@ -336,6 +335,8 @@ namespace CodePlex.VirtualizingWrapPanel
                     var viewportRect = new Rect(adjustViewPortOffset, availableSize);
                     if (itemRect.IntersectsWith(viewportRect))
                     {
+                        stopWatch.Start();
+
                         var child = generator.GetOrCreateChild(i);
                         child.Measure(childSize);
                         childSize = this.ContainerSizeForIndex(i);
@@ -343,23 +344,24 @@ namespace CodePlex.VirtualizingWrapPanel
                         // 確定したサイズを記憶
                         //this.containerLayouts[i] = new Rect(isHorizontal ? x : y, isHorizontal ? y : x, childSize.Width, childSize.Height);
 
+                        // timelimit
+                        stopWatch.Stop();
+                        if (stopWatch.ElapsedMilliseconds > limitTime)
+                        //if (stopWatch.ElapsedTicks > limitTime)
+                        {
+                            System.Console.WriteLine("request Measure");
+                            // Dispatcher.BeginInvoke((Action)(() => {
+                            System.Console.WriteLine("Measure");
+                            InvalidateMeasure();
+                            //}));
+
+                            break;
+                        }
+
                         continium = true;
                         continue;
                     }
 
-                    // timelimit
-                    stopWatch.Stop();
-                    if (stopWatch.ElapsedMilliseconds > limitTime)
-                    {
-                        System.Console.WriteLine("request Measure");
-                       // Dispatcher.BeginInvoke((Action)(() => {
-                            System.Console.WriteLine("Measure");
-                            InvalidateMeasure();
-                        //}));
-
-                        break;
-                    }
-                    stopWatch.Start();
 
                     if (continium) break;
 
