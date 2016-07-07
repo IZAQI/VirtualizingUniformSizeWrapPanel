@@ -258,13 +258,13 @@ namespace CodePlex.VirtualizingWrapPanel
             //var container = this.InternalChildren;
             //var childrenCount = container.Count;
 
-            using (var generator = new ChildGenerator(this))
-            {
-                bool continium = false;
+            bool continium = false;
 
-                var childSize = prevSize;
+            var childSize = prevSize;
 
 #if false // normal calc
+            using (var generator = new ChildGenerator(this))
+            {
                 for (int i = firstIndex; i < endIndex; i++)
                 {
                     // オフセット
@@ -289,57 +289,72 @@ namespace CodePlex.VirtualizingWrapPanel
 
                     if (continium) break;
                 }
+            }
 
 #else   // timelimit version.
-                // measure phase
-                for (int i = firstIndex; i < endIndex; i++)
+            // measure phase
+            var endCheckIndex = endIndex;
+            for (int i = firstIndex; i < endCheckIndex; i++)
+            {
+                // オフセット
+                var x = (int)((i % columCount) * GetLogicalWidth(childSize));
+                var y = (int)((i / columCount) * GetLogicalHeight(childSize));
+
+                // 子要素がビューポート内であれば子要素を生成しサイズを再計測
+                var itemRect = new Rect(isHorizontal?x:y, isHorizontal ? y : x, childSize.Width, childSize.Height);
+                var viewportRect = new Rect(adjustViewPortOffset, availableSize);
+                if (itemRect.IntersectsWith(viewportRect))
                 {
-                    // オフセット
-                    var x = (int)((i % columCount) * GetLogicalWidth(childSize));
-                    var y = (int)((i / columCount) * GetLogicalHeight(childSize));
+                    //var child = generator.GetOrCreateChild(i);
+                    //child.Measure(childSize);
+                    //childSize = this.ContainerSizeForIndex(i);
 
-                    // 子要素がビューポート内であれば子要素を生成しサイズを再計測
-                    var itemRect = new Rect(isHorizontal?x:y, isHorizontal ? y : x, childSize.Width, childSize.Height);
-                    var viewportRect = new Rect(adjustViewPortOffset, availableSize);
-                    if (itemRect.IntersectsWith(viewportRect))
+                    // 確定したサイズを記憶
+                    this.containerLayouts[i]=  new Rect(isHorizontal ? x : y, isHorizontal ? y : x, childSize.Width, childSize.Height);
+
+                    // インデックスの確定補正
+                    if (!continium)
                     {
-                        //var child = generator.GetOrCreateChild(i);
-                        //child.Measure(childSize);
-                        //childSize = this.ContainerSizeForIndex(i);
-
-                        // 確定したサイズを記憶
-                        this.containerLayouts[i]=  new Rect(isHorizontal ? x : y, isHorizontal ? y : x, childSize.Width, childSize.Height);
-
-                        continium = true;
-                        continue;
+                        firstIndex = i;
                     }
+                    endIndex = i;
 
-                    if (continium) break;
+                    continium = true;
+                    continue;
                 }
 
-                continium = false;
+                if (continium) break;
+            }
 
-                var limitTime = 10000;
-                
+            using (var generator = new ChildGenerator(this, firstIndex, endIndex))
+            {
+                //continium = false;
+
+                var limitTime = 250;
+
                 var stopWatch = new Stopwatch();
 
                 // create phase
                 for (int i = firstIndex; i < endIndex; i++)
                 {
                     // オフセット
-                    var x = (int)((i % columCount) * GetLogicalWidth(childSize));
-                    var y = (int)((i / columCount) * GetLogicalHeight(childSize));
+                    //var x = (int)((i % columCount) * GetLogicalWidth(childSize));
+                    //var y = (int)((i / columCount) * GetLogicalHeight(childSize));
 
                     // 子要素がビューポート内であれば子要素を生成しサイズを再計測
-                    var itemRect = new Rect(isHorizontal ? x : y, isHorizontal ? y : x, childSize.Width, childSize.Height);
-                    var viewportRect = new Rect(adjustViewPortOffset, availableSize);
-                    if (itemRect.IntersectsWith(viewportRect))
+                    //var itemRect = new Rect(isHorizontal ? x : y, isHorizontal ? y : x, childSize.Width, childSize.Height);
+                    //var viewportRect = new Rect(adjustViewPortOffset, availableSize);
+                    //if (itemRect.IntersectsWith(viewportRect))
                     {
-                        stopWatch.Start();
 
-                        var child = generator.GetOrCreateChild(i);
-                        child.Measure(childSize);
-                        childSize = this.ContainerSizeForIndex(i);
+                        var child = generator.GetChild(i);
+                        if (child == null)
+                        {
+                            stopWatch.Start();
+                            child = generator.GetOrCreateChild(i);
+                        }
+                        //child.Measure(childSize);
+                        //childSize = this.ContainerSizeForIndex(i);
 
                         // 確定したサイズを記憶
                         //this.containerLayouts[i] = new Rect(isHorizontal ? x : y, isHorizontal ? y : x, childSize.Width, childSize.Height);
@@ -349,11 +364,12 @@ namespace CodePlex.VirtualizingWrapPanel
                         //if (stopWatch.ElapsedMilliseconds > limitTime)
                         if (stopWatch.ElapsedTicks > limitTime)
                         {
-                            System.Console.WriteLine("request Measure");
-                            // Dispatcher.BeginInvoke((Action)(() => {
-                            System.Console.WriteLine("Measure");
-                            InvalidateMeasure();
-                            //}));
+                            Console.WriteLine("request Measure");
+                            Dispatcher.BeginInvoke((Action)(() =>
+                            {
+                                //System.Console.WriteLine("Measure");
+                                InvalidateMeasure();
+                            }));
 
                             break;
                         }
@@ -362,24 +378,22 @@ namespace CodePlex.VirtualizingWrapPanel
                         continue;
                     }
 
-
-                    if (continium) break;
-
+                    //if (continium) break;
 
                 }
 
 #endif
                 generator.CleanupChildren();
+            }
 
-                var row = childrenCount / columCount + ((childrenCount % columCount == 0) ? 0 : 1);
+            var row = childrenCount / columCount + ((childrenCount % columCount == 0) ? 0 : 1);
 
-                if (isHorizontal)
-                {
-                    maxSize = new Size(availableSize.Width, Math.Max(row * childSize.Height, availableSize.Height));
-                } else
-                {
-                    maxSize = new Size(Math.Max(row * childSize.Width, availableSize.Width), availableSize.Height );
-                }
+            if (isHorizontal)
+            {
+                maxSize = new Size(availableSize.Width, Math.Max(row * childSize.Height, availableSize.Height));
+            } else
+            {
+                maxSize = new Size(Math.Max(row * childSize.Width, availableSize.Width), availableSize.Height );
             }
 
             prevViewPortSize = availableSize;
@@ -542,6 +556,54 @@ namespace CodePlex.VirtualizingWrapPanel
                 // ItemContainerGenerator 取得前に InternalChildren にアクセスしないと null になる
                 var childrenCount = owner.InternalChildren.Count;
                 this.generator = owner.ItemContainerGenerator;
+
+                // TODO input InternalChildren created child.
+                // generator=>
+                // firstGeneratedIndex
+                // lastGeneratedIndex
+
+                var first = int.MaxValue;
+                var last = -1;
+                for(int i = 0; i < childrenCount; i++)
+                {
+                    var childPos = new GeneratorPosition(i, 0);
+                    var index = generator.IndexFromGeneratorPosition(childPos);
+
+                    first = Math.Min(first, index);
+                    last = Math.Max(last, index);
+                }
+
+                if (first < int.MaxValue)
+                    firstGeneratedIndex = first;
+                else
+                    firstGeneratedIndex = -1;
+
+                if (last >= 0) lastGeneratedIndex = last;
+
+                Console.WriteLine("F{0}:L{1}", firstGeneratedIndex, lastGeneratedIndex);
+
+            }
+
+            public ChildGenerator(VirtualizingUniformSizeWrapPanel owner, int firstIndex, int endIndex)
+            {
+                this.owner = owner;
+
+                // ItemContainerGenerator 取得前に InternalChildren にアクセスしないと null になる
+                var childrenCount = owner.InternalChildren.Count;
+                this.generator = owner.ItemContainerGenerator;
+
+                // TODO input InternalChildren created child.
+                // generator=>
+                // firstGeneratedIndex
+                // lastGeneratedIndex
+
+                firstGeneratedIndex = firstIndex;
+                lastGeneratedIndex = endIndex;
+
+                // TODO validate
+
+                Console.WriteLine("F{0}:L{1}", firstGeneratedIndex, lastGeneratedIndex);
+
             }
 
             /// <summary>
@@ -571,11 +633,45 @@ namespace CodePlex.VirtualizingWrapPanel
             /// <param name="index">アイテムのインデックス。</param>
             private void BeginGenerate(int index)
             {
-                this.firstGeneratedIndex = index;
+                // TODO check InternalChildren created child.
+                // generator=>
+                // firstGeneratedIndex
+                // lastGeneratedIndex
+                if (firstGeneratedIndex < 0)
+                {
+                    this.firstGeneratedIndex = index;
+                } else
+                {
+                    // continue by invalidateMeasure.
+                    firstGeneratedIndex = Math.Min(firstGeneratedIndex, index);
+                }
+
                 var startPos = this.generator.GeneratorPositionFromIndex(index);
                 this.currentGenerateIndex = (startPos.Offset == 0) ? startPos.Index : startPos.Index + 1;
                 this.generatorTracker = this.generator.StartAt(startPos, GeneratorDirection.Forward, true);
             }
+
+            public UIElement GetChild(int index)
+            {
+                if (this.generator == null)
+                    return this.owner.InternalChildren[index];
+
+                // TODO check InternalChildren created child.
+                // generator=>
+                // firstGeneratedIndex
+                // lastGeneratedIndex
+                //var item = generator.ContainerFromIndex(index);
+                var itemGenerator = generator as ItemContainerGenerator;
+                if (itemGenerator != null)
+                {
+                    var item = itemGenerator.ContainerFromIndex(index);
+                    if (item != null)
+                        return item as UIElement;
+                }
+                return null;
+            }
+
+
 
             /// <summary>
             /// 必要に応じてアイテムを生成し、指定したインデックスのアイテムを取得する。
@@ -586,6 +682,20 @@ namespace CodePlex.VirtualizingWrapPanel
             {
                 if (this.generator == null)
                     return this.owner.InternalChildren[index];
+
+                // TODO check InternalChildren created child.
+                // generator=>
+                // firstGeneratedIndex
+                // lastGeneratedIndex
+                //var item = generator.ContainerFromIndex(index);
+                var itemGenerator = generator as ItemContainerGenerator;
+                if (itemGenerator != null)
+                {
+                    var item = itemGenerator.ContainerFromIndex(index);
+                    if (item != null)
+                        return item as UIElement;
+                }
+
 
                 if (this.generatorTracker == null)
                     this.BeginGenerate(index);
@@ -654,9 +764,9 @@ namespace CodePlex.VirtualizingWrapPanel
                     var layout = this.containerLayouts[index];
                     layout.Offset(this.offset.X * -1, this.offset.Y * -1);
 
-                    Dispatcher.BeginInvoke(new Action(() => {
+                    //Dispatcher.BeginInvoke(new Action(() => {
                         child.Arrange(layout);
-                    }),DispatcherPriority.DataBind);
+                    //}),DispatcherPriority.DataBind);
                 }
             }
 
